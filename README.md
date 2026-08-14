@@ -237,7 +237,7 @@ Notes on the choices:
 ### Endpoint
 
 ```
-http://<your-host>:9090        (LAN)
+http://<your-host>:9090             (LAN)
 http://127.0.0.1:9090               (local)
 ```
 

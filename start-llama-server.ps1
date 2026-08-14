@@ -9,9 +9,13 @@
 # scale-up only while the server sleeps, so it never interrupts anything.
 # Decisions are appended to governor.log next to the model.
 
-$exe    = 'C:\dev\llama65cpp\llama.cpp\build\bin\llama-server.exe'
-$model  = 'C:\dev\llama65cpp\models\Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf'
-$logDir = 'C:\dev\llama65cpp\models'
+# Paths are derived from this script's location, so the repo works wherever it
+# is cloned. $PSScriptRoot resolves correctly under the scheduled task too,
+# because the task invokes powershell.exe with -File and an absolute path.
+$root   = $PSScriptRoot
+$exe    = Join-Path $root 'llama.cpp\build\bin\llama-server.exe'
+$model  = Join-Path $root 'models\Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf'
+$logDir = Join-Path $root 'models'
 $srvLog = "$logDir\server.log"
 $govLog = "$logDir\governor.log"
 
