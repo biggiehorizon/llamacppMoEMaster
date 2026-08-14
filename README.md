@@ -12,6 +12,21 @@ running large MoE models on a single 8 GB laptop GPU. It combines three things:
 The result is an OpenAI-compatible endpoint on the LAN that is always up, never fights games
 or other GPU apps for VRAM, and drops to a ~350 MiB footprint when idle.
 
+> ### Credit
+>
+> The three llama.cpp optimizations at the heart of this setup — the expert-upload/compute
+> overlap, the prefetch slot ring, and the pinned-host-memory path — are the work of
+> **[Codacus](https://github.com/thecodacus)** (`thecodacus`), from the
+> [`fable5/prefetch-experts`](https://github.com/thecodacus/llama.cpp/tree/fable5/prefetch-experts)
+> branch of their llama.cpp fork. They are what make a 35B MoE model practical on 8 GB of VRAM;
+> without them this repo would just be a launch script.
+>
+> Everything original here is the packaging around that work: the VRAM governor, the bootstrap
+> script, and these notes. Full attribution is preserved in the git authorship of every commit
+> in [`patches/`](patches/).
+>
+> llama.cpp itself is by [Georgi Gerganov and the ggml authors](https://github.com/ggml-org/llama.cpp).
+
 ---
 
 ## Quick start
@@ -97,8 +112,8 @@ llama65cpp/
 directly in this repo. Nothing is fetched at build time and there is no dependency on any
 external fork staying available — clone and build.
 
-The sources were vendored from `github.com/thecodacus/llama.cpp` branch
-`fable5/prefetch-experts` at commit `5f83fbb`, which is upstream
+The sources were vendored from [Codacus's llama.cpp fork](https://github.com/thecodacus/llama.cpp),
+branch `fable5/prefetch-experts`, at commit `5f83fbb` — which is upstream
 [`4fc4ec554`](https://github.com/ggml-org/llama.cpp/commit/4fc4ec5541b243957ae5099edb67372f8f3b550e)
 plus three commits. `patches/` keeps those three as standalone `git format-patch` files, which
 is what you want for rebasing onto newer upstream or upstreaming them.
@@ -361,8 +376,10 @@ with it — they do, verbatim, at [`llama.cpp/LICENSE`](llama.cpp/LICENSE). llam
 third-party code under its own terms in `llama.cpp/vendor/` and `llama.cpp/licenses/`; those are
 intact too. Both licenses being MIT means there is no compatibility question.
 
-The three patches in `patches/` are authored by `thecodacus <thecodacus@gmail.com>`. `git am`
-preserves that authorship, and it should be preserved if they are ever submitted upstream.
+The three patches in `patches/` are authored by **Codacus**
+(`thecodacus <thecodacus@gmail.com>`) — see [Credit](#credit). `git am` preserves that
+authorship, and it must be preserved if they are ever submitted upstream. This repo
+redistributes them, it does not claim them.
 
 > Note: llama.cpp does **not** accept predominantly AI-generated pull requests, and asks that
 > contributors fully understand and be able to maintain any code they submit. See

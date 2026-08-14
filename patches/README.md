@@ -11,7 +11,8 @@ each patch does.
 - `0002` — overlap offloaded expert weight uploads with compute (`GGML_SCHED_PREFETCH_EXPERTS`)
 - `0003` — size prefetch slots per layer, fix a fallback use-after-free
 
-Authored by `thecodacus <thecodacus@gmail.com>`. `git am` preserves that authorship.
+All three are the work of **[Codacus](https://github.com/thecodacus)**
+(`thecodacus <thecodacus@gmail.com>`). `git am` preserves that authorship — keep it that way.
 
 ## Base commit
 

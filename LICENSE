@@ -27,4 +27,8 @@ llama.cpp/LICENSE, and third-party components bundled with it retain their own
 terms under llama.cpp/vendor/ and llama.cpp/licenses/.
 
 The MIT grant above applies to the original work in this repository:
-start-llama-server.ps1, setup.ps1, README.md, and the contents of patches/.
+start-llama-server.ps1, setup.ps1, and README.md.
+
+The three patches in patches/ are authored by Codacus <thecodacus@gmail.com>
+(https://github.com/thecodacus) and are redistributed here under the same MIT
+terms as llama.cpp, with authorship preserved in their git metadata.
