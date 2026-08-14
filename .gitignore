@@ -1,5 +1,5 @@
-# the llama.cpp fork is its own git repo — track it separately, not here
-llama.cpp/
-
 # model weights (~30 GB) and runtime logs
 models/
+
+# build output lives inside the llama.cpp submodule
+llama.cpp/build/

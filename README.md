@@ -14,6 +14,45 @@ or other GPU apps for VRAM, and drops to a ~350 MiB footprint when idle.
 
 ---
 
+## Quick start
+
+Requires the CUDA Toolkit (13.x), CMake, Ninja, and an NVIDIA GPU. Run from a
+Visual Studio developer shell so the host compiler is on `PATH`.
+
+```powershell
+git clone --recursive https://github.com/<you>/llama65cpp
+cd llama65cpp
+.\setup.ps1                      # add -CudaArch 89 for Ada, 86 for Ampere, etc.
+```
+
+`setup.ps1` initialises the `llama.cpp` submodule, configures and builds `llama-server.exe`,
+and tells you which model to download. Then grab a model (~16 GB):
+
+```powershell
+huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF `
+  Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf --local-dir models
+```
+
+And start it:
+
+```powershell
+.\start-llama-server.ps1
+```
+
+The server comes up on `http://0.0.0.0:9090` with an OpenAI-compatible API. For an always-on
+setup, register the scheduled task — see [The VRAM governor](#the-vram-governor) below.
+
+> If you cloned without `--recursive`, run `git submodule update --init` first. If the fork is
+> unreachable, `setup.ps1` automatically falls back to cloning upstream llama.cpp and applying
+> `patches/`.
+
+**Adapting to other hardware:** the governor's VRAM arithmetic is tuned for an 8 GB card and
+this specific model. On different hardware, adjust `$MIN_L`, `$MAX_L`, `$BASE_MIB`, and
+`$PER_LAYER` at the top of `start-llama-server.ps1` — see
+[The VRAM governor](#the-vram-governor) for what each means.
+
+---
+
 ## Hardware / software baseline
 
 | | |
@@ -32,10 +71,11 @@ or other GPU apps for VRAM, and drops to a ~350 MiB footprint when idle.
 ```
 llama65cpp/
 ├─ README.md                  this file
+├─ setup.ps1                  one-shot bootstrap: sources → build → model instructions
 ├─ start-llama-server.ps1     watchdog + VRAM governor (the real entry point)
-├─ patches/                   the three llama.cpp patches, vendored — see patches/README.md
-├─ llama.cpp/                 patched fork — own git repo, git-ignored, see "The fork" below
-│  └─ build/bin/llama-server.exe
+├─ patches/                   the three llama.cpp patches, vendored as a fallback
+├─ llama.cpp/                 submodule — the patched fork, see "The fork" below
+│  └─ build/bin/llama-server.exe   (build output, git-ignored)
 └─ models/                    GGUF weights + logs (git-ignored, ~30 GB)
    ├─ Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf        15.7 GB  ← currently served
    ├─ gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf 13.3 GB
@@ -47,12 +87,15 @@ llama65cpp/
 
 ## The fork
 
-The `llama.cpp/` working copy is **not** tracked by this repo — it is its own git clone. What
-*is* tracked is `patches/`, the three commits exported with `git format-patch`, so a working
-build can be reproduced from this repo plus an upstream clone. See
-[`patches/README.md`](patches/README.md) for the base commit and the `git am` invocation.
+`llama.cpp/` is a **git submodule** pinned to the exact commit this rig is known to work with
+(`5f83fbb`), so `git clone --recursive` gets the full upstream source plus the patches in one
+step. `patches/` holds the same three commits exported with `git format-patch`, as a fallback
+if the fork ever becomes unreachable — see [`patches/README.md`](patches/README.md).
 
-`llama.cpp/` tracks `github.com/thecodacus/llama.cpp`, branch **`fable5/prefetch-experts`**,
+To move the pin after rebasing the fork: rebuild, verify, then
+`git add llama.cpp && git commit` in this repo.
+
+The submodule tracks `github.com/thecodacus/llama.cpp`, branch **`fable5/prefetch-experts`**,
 which carries three commits on top of upstream master. All three target the same bottleneck:
 when experts are offloaded to CPU (`--n-cpu-moe`), prefill is dominated by host→device copies
 of expert weights, and by default those copies block compute.
