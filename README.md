@@ -33,7 +33,8 @@ or other GPU apps for VRAM, and drops to a ~350 MiB footprint when idle.
 llama65cpp/
 ├─ README.md                  this file
 ├─ start-llama-server.ps1     watchdog + VRAM governor (the real entry point)
-├─ llama.cpp/                 patched fork — own git repo, see "The fork" below
+├─ patches/                   the three llama.cpp patches, vendored — see patches/README.md
+├─ llama.cpp/                 patched fork — own git repo, git-ignored, see "The fork" below
 │  └─ build/bin/llama-server.exe
 └─ models/                    GGUF weights + logs (git-ignored, ~30 GB)
    ├─ Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf        15.7 GB  ← currently served
@@ -45,6 +46,11 @@ llama65cpp/
 ---
 
 ## The fork
+
+The `llama.cpp/` working copy is **not** tracked by this repo — it is its own git clone. What
+*is* tracked is `patches/`, the three commits exported with `git format-patch`, so a working
+build can be reproduced from this repo plus an upstream clone. See
+[`patches/README.md`](patches/README.md) for the base commit and the `git am` invocation.
 
 `llama.cpp/` tracks `github.com/thecodacus/llama.cpp`, branch **`fable5/prefetch-experts`**,
 which carries three commits on top of upstream master. All three target the same bottleneck:

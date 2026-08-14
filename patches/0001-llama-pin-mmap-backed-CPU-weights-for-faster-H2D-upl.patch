@@ -1,0 +1,130 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: thecodacus <thecodacus@gmail.com>
+Date: Thu, 2 Jul 2026 09:44:53 +0000
+Subject: [PATCH] llama : pin mmap-backed CPU weights for faster H2D uploads
+
+Wire the existing GGML_CUDA_REGISTER_HOST path back up: after model load,
+cudaHostRegister the mmap pages backing weights kept in system memory.
+Recovers pageable-copy losses when MoE experts are streamed to the GPU
+during prefill (n-cpu-moe): Qwen3.6-35B-A3B pp2048 1144 -> 1385 t/s on
+RTX 3060. Opt-in via GGML_CUDA_REGISTER_HOST=1, unchanged otherwise.
+---
+ src/llama-mmap.cpp         | 36 +++++++++++++++++++++++++++++++++++-
+ src/llama-mmap.h           |  8 ++++++++
+ src/llama-model-loader.cpp | 16 ++++++++++++++++
+ 3 files changed, 59 insertions(+), 1 deletion(-)
+
+diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
+index ed572da7f..4b073fd3e 100644
+--- a/src/llama-mmap.cpp
++++ b/src/llama-mmap.cpp
+@@ -618,13 +618,47 @@ struct llama_mmap::impl {
+ };
+ 
+ llama_mmap::llama_mmap(struct llama_file * file, size_t prefetch, bool numa) : pimpl(std::make_unique<impl>(file, prefetch, numa)) {}
+-llama_mmap::~llama_mmap() = default;
++
++llama_mmap::~llama_mmap() {
++    // unpin before the pages are unmapped by the impl destructor
++    if (host_reg_addr && host_unreg_fn) {
++        host_unreg_fn(host_reg_addr);
++    }
++}
+ 
+ size_t llama_mmap::size() const { return pimpl->size; }
+ void * llama_mmap::addr() const { return pimpl->addr; }
+ 
+ void llama_mmap::unmap_fragment(size_t first, size_t last) { pimpl->unmap_fragment(first, last); }
+ 
++size_t llama_mmap::register_host(size_t first, size_t last, bool (*reg_fn)(void *, size_t), void (*unreg_fn)(void *)) {
++#ifdef _POSIX_MAPPED_FILES
++    if (host_reg_addr || !reg_fn || !unreg_fn || last <= first) {
++        return 0;
++    }
++
++    // expand outward to the page boundaries retained by unmap_fragment
++    const size_t page_size = sysconf(_SC_PAGESIZE);
++    first = first & ~(page_size - 1);
++    last  = (last + page_size - 1) & ~(page_size - 1);
++
++    void * reg_addr = (uint8_t *) pimpl->addr + first;
++    if (!reg_fn(reg_addr, last - first)) {
++        return 0;
++    }
++
++    host_reg_addr  = reg_addr;
++    host_unreg_fn  = unreg_fn;
++    return last - first;
++#else
++    GGML_UNUSED(first);
++    GGML_UNUSED(last);
++    GGML_UNUSED(reg_fn);
++    GGML_UNUSED(unreg_fn);
++    return 0;
++#endif
++}
++
+ #if defined(_POSIX_MEMLOCK_RANGE) || defined(_WIN32)
+ const bool llama_mmap::SUPPORTED  = true;
+ #else
+diff --git a/src/llama-mmap.h b/src/llama-mmap.h
+index b7d5c61e9..6f118dbf6 100644
+--- a/src/llama-mmap.h
++++ b/src/llama-mmap.h
+@@ -50,11 +50,19 @@ struct llama_mmap {
+ 
+     void unmap_fragment(size_t first, size_t last);
+ 
++    // pin the pages backing [first, last) with a backend allocator for faster H2D copies,
++    // unpinned in the destructor before the pages are unmapped
++    // returns the number of bytes registered, 0 on failure
++    size_t register_host(size_t first, size_t last, bool (*reg_fn)(void *, size_t), void (*unreg_fn)(void *));
++
+     static const bool SUPPORTED;
+ 
+ private:
+     struct impl;
+     std::unique_ptr<impl> pimpl;
++
++    void * host_reg_addr = nullptr;
++    void (*host_unreg_fn)(void *) = nullptr;
+ };
+ 
+ struct llama_mlock {
+diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
+index e07b0d231..3a074e5da 100644
+--- a/src/llama-model-loader.cpp
++++ b/src/llama-model-loader.cpp
+@@ -1673,6 +1673,15 @@ bool llama_model_loader::load_all_data(
+     if (size_done >= size_data) {
+         // unmap offloaded tensors and metadata
+         if (use_mmap) {
++            // pin the pages backing the weights kept in system memory for faster H2D copies
++            bool (*reg_fn)(void *, size_t) = nullptr;
++            void (*unreg_fn)(void *) = nullptr;
++            for (size_t i = 0; i < ggml_backend_dev_count() && !reg_fn; i++) {
++                ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(ggml_backend_dev_get(i));
++                reg_fn   = (bool (*)(void *, size_t)) ggml_backend_reg_get_proc_address(reg, "ggml_backend_register_host_buffer");
++                unreg_fn = (void (*)(void *))         ggml_backend_reg_get_proc_address(reg, "ggml_backend_unregister_host_buffer");
++            }
++
+             for (uint32_t idx = 0; idx < mappings.size(); idx++) {
+                 const auto & mmap_used = mmaps_used.at(idx);
+                 auto & mapping = mappings.at(idx);
+@@ -1680,6 +1689,13 @@ bool llama_model_loader::load_all_data(
+                 if (mmap_used.second != 0) {
+                     mapping->unmap_fragment(mmap_used.second, mapping->size());
+                 }
++                if (mmap_used.second > mmap_used.first) {
++                    size_t n_registered = mapping->register_host(mmap_used.first, mmap_used.second, reg_fn, unreg_fn);
++                    if (n_registered > 0) {
++                        LLAMA_LOG_INFO("%s: pinned %.2f MiB of mapped model memory for faster H2D transfers\n",
++                                __func__, n_registered / 1024.0 / 1024.0);
++                    }
++                }
+             }
+         }
+         if (progress_callback) {
+-- 
+2.51.0.windows.1
+
