@@ -1,4 +1,4 @@
-# llama65cpp — always-on local inference rig
+# llamacppMoEMaster — always-on local inference rig
 
 A personal, always-listening [llama.cpp](https://github.com/ggml-org/llama.cpp) server for
 running large MoE models on a single 8 GB laptop GPU. It combines three things:
@@ -36,8 +36,8 @@ Visual Studio developer shell so the host compiler is on `PATH`.
 
 ```powershell
 git config --global core.longpaths true    # required on Windows, see note below
-git clone https://github.com/<you>/llama65cpp C:\dev\llama65cpp
-cd C:\dev\llama65cpp
+git clone https://github.com/<you>/llamacppMoEMaster C:\dev\llamacppMoEMaster
+cd C:\dev\llamacppMoEMaster
 .\setup.ps1                                # add -CudaArch 89 for Ada, 86 for Ampere, etc.
 ```
 
@@ -88,7 +88,7 @@ this specific model. On different hardware, adjust `$MIN_L`, `$MAX_L`, `$BASE_MI
 ## Layout
 
 ```
-llama65cpp/
+llamacppMoEMaster/
 ├─ README.md                  this file
 ├─ LICENSE                    MIT (this repo); llama.cpp keeps its own at llama.cpp/LICENSE
 ├─ setup.ps1                  one-shot bootstrap: sources → build → model instructions
@@ -181,15 +181,15 @@ copy the result back:
 git clone https://github.com/ggml-org/llama.cpp $env:TEMP\lcpp
 cd $env:TEMP\lcpp
 git checkout -b prefetch-experts
-git am C:\dev\llama65cpp\patches\*.patch      # resolve conflicts here if any
+git am C:\dev\llamacppMoEMaster\patches\*.patch      # resolve conflicts here if any
 
 # 2. re-export the patches and refresh the vendored tree
-git format-patch -3 --no-numbered --zero-commit -o C:\dev\llama65cpp\patches
+git format-patch -3 --no-numbered --zero-commit -o C:\dev\llamacppMoEMaster\patches
 Remove-Item -Recurse -Force .git
-robocopy . C:\dev\llama65cpp\llama.cpp /MIR /XD build
+robocopy . C:\dev\llamacppMoEMaster\llama.cpp /MIR /XD build
 
 # 3. rebuild, verify, then commit the update in one go
-cd C:\dev\llama65cpp; .\setup.ps1
+cd C:\dev\llamacppMoEMaster; .\setup.ps1
 ```
 
 Then update the base commit hash in [`patches/README.md`](patches/README.md).
@@ -205,7 +205,7 @@ Conflicts, if any, will land in `ggml/src/ggml-backend.cpp` around
 ## Building
 
 ```powershell
-cd C:\dev\llama65cpp\llama.cpp
+cd C:\dev\llamacppMoEMaster\llama.cpp
 cmake -B build -G Ninja `
   -DCMAKE_BUILD_TYPE=Release `
   -DGGML_CUDA=ON `
@@ -272,7 +272,7 @@ scheduled task:
 
 ```
 conhost.exe --headless powershell.exe -NoProfile -ExecutionPolicy Bypass \
-  -File "C:\dev\llama65cpp\start-llama-server.ps1"
+  -File "C:\dev\llamacppMoEMaster\start-llama-server.ps1"
 ```
 
 Each tick it does three things:
@@ -323,7 +323,7 @@ once it passes 200 KB.
 
 ```powershell
 $action  = New-ScheduledTaskAction -Execute 'conhost.exe' `
-  -Argument '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\dev\llama65cpp\start-llama-server.ps1"'
+  -Argument '--headless powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\dev\llamacppMoEMaster\start-llama-server.ps1"'
 $logon   = New-ScheduledTaskTrigger -AtLogOn
 $repeat  = New-ScheduledTaskTrigger -Once -At (Get-Date) `
   -RepetitionInterval (New-TimeSpan -Minutes 3)

@@ -1,7 +1,7 @@
 # One-shot bootstrap: fetch llama.cpp sources, apply the patches if needed, and build.
 #
-#   git clone --recursive <this repo> llama65cpp
-#   cd llama65cpp
+#   git clone --recursive <this repo> llamacppMoEMaster
+#   cd llamacppMoEMaster
 #   .\setup.ps1
 #
 # Safe to re-run; it skips work that is already done.
