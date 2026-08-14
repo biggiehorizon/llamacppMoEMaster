@@ -22,14 +22,18 @@ $src  = Join-Path $root 'llama.cpp'
 # the build still works if the fork is unavailable.
 if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
     Write-Host '==> submodule empty, initialising' -ForegroundColor Cyan
-    git -C $root submodule update --init --depth 1 llama.cpp
+    # llama.cpp has paths past 260 chars (tools/ui/...), so checkout fails on
+    # stock Windows git unless long paths are enabled for the submodule.
+    git -C $root -c core.longpaths=true submodule update --init --depth 1 llama.cpp
+    git -C $src config core.longpaths true
 }
 
 if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
     Write-Host '==> submodule unavailable, falling back to upstream + patches' -ForegroundColor Yellow
     $base = '4fc4ec5541b243957ae5099edb67372f8f3b550e'   # keep in sync with patches/README.md
     Remove-Item $src -Recurse -Force -ErrorAction SilentlyContinue
-    git clone https://github.com/ggml-org/llama.cpp $src
+    git -c core.longpaths=true clone https://github.com/ggml-org/llama.cpp $src
+    git -C $src config core.longpaths true
     git -C $src checkout -b prefetch-experts $base
     git -C $src am (Get-ChildItem (Join-Path $root 'patches\*.patch') | Sort-Object Name)
 }

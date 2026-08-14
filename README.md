@@ -42,6 +42,13 @@ And start it:
 The server comes up on `http://0.0.0.0:9090` with an OpenAI-compatible API. For an always-on
 setup, register the scheduled task — see [The VRAM governor](#the-vram-governor) below.
 
+> **Windows long paths.** llama.cpp has source paths longer than 260 characters (under
+> `tools/ui/`), so a stock Windows git fails the checkout with `Filename too long`. `setup.ps1`
+> handles this, but if you clone the submodule by hand, either use
+> `git -c core.longpaths=true submodule update --init` or set it once globally:
+> `git config --global core.longpaths true`. Cloning into a short path (`C:\dev\...` rather than
+> a deeply nested one) also helps.
+
 > If you cloned without `--recursive`, run `git submodule update --init` first. If the fork is
 > unreachable, `setup.ps1` automatically falls back to cloning upstream llama.cpp and applying
 > `patches/`.
