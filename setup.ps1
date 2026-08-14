@@ -18,25 +18,24 @@ $root = $PSScriptRoot
 $src  = Join-Path $root 'llama.cpp'
 
 # ---- 1. sources ----------------------------------------------------------
-# Normal path: the submodule. Fallback: clone upstream and apply patches/, so
-# the build still works if the fork is unavailable.
+# llama.cpp is vendored directly into this repo (patches already applied), so a
+# plain `git clone` is all that is needed. If the tree is missing, the clone was
+# probably truncated by Windows' 260-char path limit -- see README.
 if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
-    Write-Host '==> submodule empty, initialising' -ForegroundColor Cyan
-    # llama.cpp has paths past 260 chars (tools/ui/...), so checkout fails on
-    # stock Windows git unless long paths are enabled for the submodule.
-    git -C $root -c core.longpaths=true submodule update --init --depth 1 llama.cpp
-    git -C $src config core.longpaths true
-}
+    throw @"
+llama.cpp\CMakeLists.txt not found.
 
-if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
-    Write-Host '==> submodule unavailable, falling back to upstream + patches' -ForegroundColor Yellow
-    $base = '4fc4ec5541b243957ae5099edb67372f8f3b550e'   # keep in sync with patches/README.md
-    Remove-Item $src -Recurse -Force -ErrorAction SilentlyContinue
-    git -c core.longpaths=true clone https://github.com/ggml-org/llama.cpp $src
-    git -C $src config core.longpaths true
-    git -C $src checkout -b prefetch-experts $base
-    git -C $src am (Get-ChildItem (Join-Path $root 'patches\*.patch') | Sort-Object Name)
+The sources ship inside this repo, so this usually means the clone was
+incomplete. llama.cpp has paths longer than 260 characters, which stock
+Windows git refuses to check out. Fix with:
+
+    git config --global core.longpaths true
+    git checkout .
+
+and clone into a short path such as C:\dev\ rather than a deeply nested one.
+"@
 }
+Write-Host '==> sources present (vendored)' -ForegroundColor Green
 
 # ---- 2. build ------------------------------------------------------------
 $exe = Join-Path $src 'build\bin\llama-server.exe'

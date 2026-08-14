@@ -1,4 +1,0 @@
-[submodule "llama.cpp"]
-	path = llama.cpp
-	url = https://github.com/thecodacus/llama.cpp
-	branch = fable5/prefetch-experts

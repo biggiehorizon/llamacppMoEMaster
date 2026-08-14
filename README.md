@@ -20,13 +20,15 @@ Requires the CUDA Toolkit (13.x), CMake, Ninja, and an NVIDIA GPU. Run from a
 Visual Studio developer shell so the host compiler is on `PATH`.
 
 ```powershell
-git clone --recursive https://github.com/<you>/llama65cpp
-cd llama65cpp
-.\setup.ps1                      # add -CudaArch 89 for Ada, 86 for Ampere, etc.
+git config --global core.longpaths true    # required on Windows, see note below
+git clone https://github.com/<you>/llama65cpp C:\dev\llama65cpp
+cd C:\dev\llama65cpp
+.\setup.ps1                                # add -CudaArch 89 for Ada, 86 for Ampere, etc.
 ```
 
-`setup.ps1` initialises the `llama.cpp` submodule, configures and builds `llama-server.exe`,
-and tells you which model to download. Then grab a model (~16 GB):
+The patched llama.cpp sources ship **inside this repo** — there is no submodule and nothing
+else to fetch. `setup.ps1` configures and builds `llama-server.exe`, then tells you which model
+to download. Grab one (~16 GB):
 
 ```powershell
 huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF `
@@ -42,16 +44,11 @@ And start it:
 The server comes up on `http://0.0.0.0:9090` with an OpenAI-compatible API. For an always-on
 setup, register the scheduled task — see [The VRAM governor](#the-vram-governor) below.
 
-> **Windows long paths.** llama.cpp has source paths longer than 260 characters (under
-> `tools/ui/`), so a stock Windows git fails the checkout with `Filename too long`. `setup.ps1`
-> handles this, but if you clone the submodule by hand, either use
-> `git -c core.longpaths=true submodule update --init` or set it once globally:
-> `git config --global core.longpaths true`. Cloning into a short path (`C:\dev\...` rather than
-> a deeply nested one) also helps.
-
-> If you cloned without `--recursive`, run `git submodule update --init` first. If the fork is
-> unreachable, `setup.ps1` automatically falls back to cloning upstream llama.cpp and applying
-> `patches/`.
+> ⚠️ **Windows long paths — set this before cloning.** llama.cpp has source paths longer than
+> 260 characters (under `tools/ui/`), so stock Windows git aborts the checkout with
+> `Filename too long`, leaving a partial tree. Run `git config --global core.longpaths true`
+> first, and clone into a short path like `C:\dev\` rather than somewhere deeply nested. If you
+> already cloned and files are missing, enable the setting and run `git checkout .` to recover.
 
 **Adapting to other hardware:** the governor's VRAM arithmetic is tuned for an 8 GB card and
 this specific model. On different hardware, adjust `$MIN_L`, `$MAX_L`, `$BASE_MIB`, and
@@ -80,8 +77,9 @@ llama65cpp/
 ├─ README.md                  this file
 ├─ setup.ps1                  one-shot bootstrap: sources → build → model instructions
 ├─ start-llama-server.ps1     watchdog + VRAM governor (the real entry point)
-├─ patches/                   the three llama.cpp patches, vendored as a fallback
-├─ llama.cpp/                 submodule — the patched fork, see "The fork" below
+├─ patches/                   the three patches as standalone files, for upstreaming/rebasing
+├─ llama.cpp/                 full patched llama.cpp source, tracked in this repo
+│  ├─ models/                 upstream tokenizer test fixtures (tracked, ~75 MB)
 │  └─ build/bin/llama-server.exe   (build output, git-ignored)
 └─ models/                    GGUF weights + logs (git-ignored, ~30 GB)
    ├─ Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf        15.7 GB  ← currently served
@@ -94,16 +92,17 @@ llama65cpp/
 
 ## The fork
 
-`llama.cpp/` is a **git submodule** pinned to the exact commit this rig is known to work with
-(`5f83fbb`), so `git clone --recursive` gets the full upstream source plus the patches in one
-step. `patches/` holds the same three commits exported with `git format-patch`, as a fallback
-if the fork ever becomes unreachable — see [`patches/README.md`](patches/README.md).
+`llama.cpp/` holds the **full upstream source with the patches already applied**, tracked
+directly in this repo. Nothing is fetched at build time and there is no dependency on any
+external fork staying available — clone and build.
 
-To move the pin after rebasing the fork: rebuild, verify, then
-`git add llama.cpp && git commit` in this repo.
+The sources were vendored from `github.com/thecodacus/llama.cpp` branch
+`fable5/prefetch-experts` at commit `5f83fbb`, which is upstream
+[`4fc4ec554`](https://github.com/ggml-org/llama.cpp/commit/4fc4ec5541b243957ae5099edb67372f8f3b550e)
+plus three commits. `patches/` keeps those three as standalone `git format-patch` files, which
+is what you want for rebasing onto newer upstream or upstreaming them.
 
-The submodule tracks `github.com/thecodacus/llama.cpp`, branch **`fable5/prefetch-experts`**,
-which carries three commits on top of upstream master. All three target the same bottleneck:
+All three target the same bottleneck:
 when experts are offloaded to CPU (`--n-cpu-moe`), prefill is dominated by host→device copies
 of expert weights, and by default those copies block compute.
 
@@ -157,14 +156,33 @@ VRAM. It also requires `op_offload` to be enabled — with it off, prefetch is s
 
 ### Keeping up with upstream
 
+Because the sources are vendored, `llama.cpp/` has no git history of its own — this repo's
+history *is* its history. To move to a newer upstream, rebuild the tree in a scratch clone and
+copy the result back:
+
 ```powershell
-cd C:\dev\llama65cpp\llama.cpp
-git fetch origin
-git rebase origin/master          # the three commits are small and touch narrow surfaces
+# 1. rebase the three patches onto current upstream, in a scratch clone
+git clone https://github.com/ggml-org/llama.cpp $env:TEMP\lcpp
+cd $env:TEMP\lcpp
+git checkout -b prefetch-experts
+git am C:\dev\llama65cpp\patches\*.patch      # resolve conflicts here if any
+
+# 2. re-export the patches and refresh the vendored tree
+git format-patch -3 --no-numbered --zero-commit -o C:\dev\llama65cpp\patches
+Remove-Item -Recurse -Force .git
+robocopy . C:\dev\llama65cpp\llama.cpp /MIR /XD build
+
+# 3. rebuild, verify, then commit the update in one go
+cd C:\dev\llama65cpp; .\setup.ps1
 ```
 
-Rebase conflicts, if any, will land in `ggml/src/ggml-backend.cpp` around
-`ggml_backend_sched_compute_splits`, which is a hot file upstream.
+Then update the base commit hash in [`patches/README.md`](patches/README.md).
+
+Conflicts, if any, will land in `ggml/src/ggml-backend.cpp` around
+`ggml_backend_sched_compute_splits()`, which is a hot file upstream.
+
+> `robocopy /MIR` mirrors deletions too, which is what you want — but it is destructive.
+> Make sure your working tree is committed first so `git diff` can show you exactly what moved.
 
 ---
 
@@ -333,10 +351,17 @@ of `start-llama-server.ps1` — the governor's arithmetic is model-specific.
 
 ## Licensing / attribution
 
-`llama.cpp` is MIT-licensed, so maintaining a private or public fork is fine as long as the
-upstream `LICENSE` and copyright notice stay intact — they do. The three patches above are
-authored by `thecodacus <thecodacus@gmail.com>`; preserve that authorship if this is ever
-published or upstreamed.
+This repo **contains a full copy of llama.cpp**, which is MIT-licensed. Redistribution is
+explicitly permitted provided the copyright notice and license text travel with it — they do,
+at [`llama.cpp/LICENSE`](llama.cpp/LICENSE), unmodified. llama.cpp bundles third-party code
+under its own terms in `llama.cpp/vendor/` and `llama.cpp/licenses/`; those are intact too.
 
-This repo (the governor script and these notes) is separate from the fork and carries no
-upstream code.
+The three patches in `patches/` are authored by `thecodacus <thecodacus@gmail.com>`. `git am`
+preserves that authorship, and it should be preserved if they are ever submitted upstream.
+
+The rig-specific files — `start-llama-server.ps1`, `setup.ps1`, and this README — are the only
+original work here.
+
+> Note: llama.cpp does **not** accept predominantly AI-generated pull requests, and asks that
+> contributors fully understand and be able to maintain any code they submit. See
+> `llama.cpp/AGENTS.md` before considering upstreaming anything.

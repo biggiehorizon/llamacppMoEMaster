@@ -1,5 +1,11 @@
-# model weights (~30 GB) and runtime logs
-models/
+# Model weights (~30 GB) and runtime logs.
+# Anchored with a leading slash on purpose: a bare "models/" would also match
+# llama.cpp/models/, which holds the upstream tokenizer test fixtures we DO track.
+/models/
 
-# build output lives inside the llama.cpp submodule
-llama.cpp/build/
+# Build output.
+/llama.cpp/build/
+
+# Git history of the upstream fork this tree was vendored from, kept aside so
+# rebases are still possible. Safe to delete (420 MB); see README.
+/.fork-git/
