@@ -70,7 +70,7 @@ $default = Join-Path $models 'Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf'
 if (-not (Test-Path $default)) {
     Write-Host ''
     Write-Host 'No model found. Download one into models\ before starting the server:' -ForegroundColor Yellow
-    Write-Host '  huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF \'
+    Write-Host '  huggingface-cli download unsloth/Qwen3.6-35B-A3B-GGUF `'
     Write-Host '    Qwen3.6-35B-A3B-UD-Q3_K_XL.gguf --local-dir models'
     Write-Host ''
     Write-Host 'Use a K-quant, not an IQ-quant: CUDA 13.2 miscompiles IQ kernels for sm_120.' -ForegroundColor Yellow
