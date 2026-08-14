@@ -1,0 +1,2 @@
+# never convert line endings in patches — CRLF breaks `git am`
+*.patch -text
