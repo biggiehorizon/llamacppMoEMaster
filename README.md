@@ -75,6 +75,7 @@ this specific model. On different hardware, adjust `$MIN_L`, `$MAX_L`, `$BASE_MI
 ```
 llama65cpp/
 ├─ README.md                  this file
+├─ LICENSE                    MIT (this repo); llama.cpp keeps its own at llama.cpp/LICENSE
 ├─ setup.ps1                  one-shot bootstrap: sources → build → model instructions
 ├─ start-llama-server.ps1     watchdog + VRAM governor (the real entry point)
 ├─ patches/                   the three patches as standalone files, for upstreaming/rebasing
@@ -351,17 +352,61 @@ of `start-llama-server.ps1` — the governor's arithmetic is model-specific.
 
 ## Licensing / attribution
 
-This repo **contains a full copy of llama.cpp**, which is MIT-licensed. Redistribution is
-explicitly permitted provided the copyright notice and license text travel with it — they do,
-at [`llama.cpp/LICENSE`](llama.cpp/LICENSE), unmodified. llama.cpp bundles third-party code
-under its own terms in `llama.cpp/vendor/` and `llama.cpp/licenses/`; those are intact too.
+This repository is **MIT-licensed** — see [`LICENSE`](LICENSE). That grant covers the original
+work here: `start-llama-server.ps1`, `setup.ps1`, this README, and `patches/`.
+
+It also **contains a full copy of llama.cpp**, which is independently MIT-licensed.
+Redistribution is explicitly permitted provided the copyright notice and license text travel
+with it — they do, verbatim, at [`llama.cpp/LICENSE`](llama.cpp/LICENSE). llama.cpp bundles
+third-party code under its own terms in `llama.cpp/vendor/` and `llama.cpp/licenses/`; those are
+intact too. Both licenses being MIT means there is no compatibility question.
 
 The three patches in `patches/` are authored by `thecodacus <thecodacus@gmail.com>`. `git am`
 preserves that authorship, and it should be preserved if they are ever submitted upstream.
 
-The rig-specific files — `start-llama-server.ps1`, `setup.ps1`, and this README — are the only
-original work here.
-
 > Note: llama.cpp does **not** accept predominantly AI-generated pull requests, and asks that
 > contributors fully understand and be able to maintain any code they submit. See
 > `llama.cpp/AGENTS.md` before considering upstreaming anything.
+
+---
+
+## How the sources are vendored
+
+Notes for anyone maintaining or re-doing the vendoring, and a record of what was verified.
+
+**What is tracked:** all 3,019 files of the llama.cpp tree, matching upstream exactly.
+`.git` is ~48 MB. Model weights are excluded; the largest tracked file is a 15 MB tokenizer
+fixture, comfortably under GitHub's 100 MB per-file limit.
+
+**Fidelity check.** The vendored tree hashes to `1cbce4cc79442bc287c823937d965d7b73b2e0c6`,
+which is byte-for-byte identical to fork commit `5f83fbb`, file modes included. To re-verify
+after any future re-vendoring:
+
+```powershell
+git rev-parse HEAD:llama.cpp        # must equal the source commit's tree hash
+```
+
+Copying a git working tree into another repo is lossier than it looks. Three things bit us,
+all of which will bite again on a re-vendor:
+
+1. **Ignore rules match at any depth.** A bare `models/` in `.gitignore` also matches
+   `llama.cpp/models/`, silently dropping 111 tokenizer fixtures the test suite needs. The rules
+   are anchored with a leading slash (`/models/`) for exactly this reason — don't un-anchor them.
+2. **Upstream force-adds three files past its own `.gitignore`** (`build-xcframework.sh`, a
+   benchmark `.log`, and an Xcode plist). A plain `git add` drops them; they need `git add -f`.
+3. **Windows does not preserve file modes.** Vendoring from a Windows checkout flattens every
+   `100755` file to `100644`, so 117 scripts — `ci/run.sh`, the `convert_*.py` tools — arrive
+   non-executable for anyone on Linux or macOS. Restore with `git update-index --chmod=+x`.
+
+The reliable way to catch all three is to diff against the source repo rather than eyeball it:
+
+```powershell
+# file list, contents, and modes, in one comparison
+git --git-dir=<source>\.git ls-tree -r <commit> | Sort-Object > up.txt
+git ls-tree -r HEAD:llama.cpp        | Sort-Object > ours.txt
+Compare-Object (Get-Content up.txt) (Get-Content ours.txt)
+```
+
+**`.fork-git`.** The 420 MB git history of the fork these sources came from is kept aside at
+`.fork-git` (git-ignored) so the original commits remain available. Restore it with
+`mv .fork-git llama.cpp\.git`, or delete it — the patches in `patches/` carry the same changes.
